@@ -33,11 +33,11 @@ def _svg_go_board(size=7, cell=38, stones=None, labels=None, marks=None):
         x = pad + c * cell
         y = pad + r * cell
         parts.append(
-            f'<circle cx="{x}" cy="{y - cell * 0.34}" r="11" fill="#ffe9a8" '
+            f'<circle cx="{x}" cy="{y}" r="11" fill="#ffe9a8" '
             f'stroke="#8a5a2b" stroke-width="1"/>'
         )
         parts.append(
-            f'<text x="{x}" y="{y - cell * 0.34}" text-anchor="middle" '
+            f'<text x="{x}" y="{y}" text-anchor="middle" '
             f'dominant-baseline="central" font-size="13" font-weight="bold" '
             f'fill="#6b421d">{text}</text>'
         )
@@ -68,6 +68,44 @@ def _svg_go_board(size=7, cell=38, stones=None, labels=None, marks=None):
             f'<text x="{x}" y="{y}" text-anchor="middle" dominant-baseline="central" '
             f'font-size="{cell * 0.55}" fill="#c0392b" font-weight="bold">{text}</text>'
         )
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def _svg_board19():
+    """19 路棋盘示意图：标注 8 个星位（金点）与天元（红点）。"""
+    size = 19
+    cell = 15
+    pad = 24
+    W = pad * 2 + cell * (size - 1)
+    parts = [
+        f'<svg class="mini-board" viewBox="0 0 {W} {W}" role="img" aria-label="19路棋盘示意图">',
+        f'<rect x="0" y="0" width="{W}" height="{W}" rx="12" fill="#eebf6f"/>',
+    ]
+    for i in range(size):
+        y = pad + i * cell
+        x = pad + i * cell
+        parts.append(
+            f'<line x1="{pad}" y1="{y}" x2="{pad + cell * (size - 1)}" y2="{y}" '
+            f'stroke="#7a5a2e" stroke-width="1.1"/>'
+        )
+        parts.append(
+            f'<line x1="{x}" y1="{pad}" x2="{x}" y2="{pad + cell * (size - 1)}" '
+            f'stroke="#7a5a2e" stroke-width="1.1"/>'
+        )
+    # 8 个星位：四角星 + 四边星（都在三路线交叉点上）
+    stars = [(3, 3), (3, 15), (15, 3), (15, 15), (3, 9), (9, 3), (9, 15), (15, 9)]
+    for r, c in stars:
+        x = pad + c * cell
+        y = pad + r * cell
+        parts.append(
+            f'<circle cx="{x}" cy="{y}" r="4" fill="#c98f2e" '
+            f'stroke="#8a5a2b" stroke-width="1"/>'
+        )
+    # 天元：棋盘正中央
+    x = pad + 9 * cell
+    y = pad + 9 * cell
+    parts.append(f'<circle cx="{x}" cy="{y}" r="5.5" fill="#c0392b"/>')
     parts.append("</svg>")
     return "".join(parts)
 
@@ -105,9 +143,76 @@ _SVG_SIHUO = _svg_go_board(
     },
     marks={(2, 3): "★"},
 )
+_SVG_BOARD19 = _svg_board19()
+# 禁着点：角上白棋大龙围住 × 点，黑下 × 无气且提不掉白棋（白棋外气仍在）
+_SVG_FORBIDDEN = _svg_go_board(
+    stones={
+        (0, 1): "W", (1, 0): "W", (1, 1): "W", (1, 2): "W", (2, 1): "W",
+        (0, 2): "B", (2, 0): "B",
+    },
+    marks={(0, 0): "×"},
+)
+# 劫争：黑子 (2,2) 只剩 1 口气 (3,2)；白 1 提黑后，黑不能马上在 ★ 位提回
+_SVG_KO = _svg_go_board(
+    stones={
+        (2, 2): "B",
+        (1, 2): "W", (2, 1): "W", (2, 3): "W",
+        (3, 1): "B", (3, 3): "B", (4, 2): "B",
+    },
+    labels={(3, 2): "1"},
+    marks={(2, 2): "★"},
+)
 
 # ---------------- 文章 ----------------
 ARTICLES = [
+    {
+        "slug": "rules",
+        "title": "围棋规则",
+        "summary": "认识棋盘、了解基本规则和禁手，学会围棋的玩法。",
+        "content": f"""<p class="lead">围棋是两人轮流在棋盘上落子的策略游戏：最后谁围住的“地盘”多，谁就赢。规则很简单，变化却无穷无尽。</p>
+
+<h2>棋盘与棋子</h2>
+<p>标准棋盘是 <strong>19 路 × 19 路</strong>，共有 <strong>361 个交叉点</strong>。棋子下在交叉点上（不是格子里）。黑棋先手，双方各执一色。</p>
+<figure class="go-figure">
+  {_SVG_BOARD19}
+  <figcaption>19 路棋盘：四角、四边共 8 个<strong>星位</strong>（金点），正中央是<strong>天元</strong>（红点）。</figcaption>
+</figure>
+<p>棋盘位置有讲究：<strong>角</strong>（两条边交汇处）、<strong>边</strong>（一条边附近）、<strong>中央</strong>。角最“省钱”，所以高手布局总是先占角、再占边、最后才向中央发展。<strong>星位</strong>是占角时常用的起点（三路线交叉点），<strong>天元</strong>是棋盘正中心，也是最中央的位置。</p>
+
+<h2>基本规则</h2>
+<ol class="num-steps">
+  <li><strong>轮流落子</strong>：黑先白后，一人一手，落子后不能移动。</li>
+  <li><strong>下在空交叉点</strong>：不能下在已经有棋子的点上。</li>
+  <li><strong>气尽提子</strong>：棋子的“气”被全部堵住时，必须立刻从棋盘上提掉（详见<a href="/learn/tizi">提子</a>）。</li>
+  <li><strong>落子无悔</strong>：拿起来就生效，不能反悔重下。</li>
+</ol>
+
+<h2>禁手：有些棋不能下</h2>
+<p>有几种落子是被<strong>禁止</strong>的，下了就是“禁着”（犯规）：</p>
+<h3>① 禁着点：不能“自杀”</h3>
+<p>如果落子之后，<strong>自己这颗棋子没有任何气</strong>，而且<strong>不能提掉对方任何棋子</strong>，这个点就是<strong>禁着点</strong>（也叫禁入点），不能下。</p>
+<figure class="go-figure">
+  {_SVG_FORBIDDEN}
+  <figcaption>角上 × 处：黑棋下在这里自己没气，又提不掉白棋（白棋外面还有气），所以是禁着点。</figcaption>
+</figure>
+<h3>② 打劫：不能马上提回</h3>
+<p>“打劫”是围棋最著名的特殊规则。如下图：黑子只剩 1 口气，白棋下 1 位可以提掉它；但黑棋<strong>不能立刻</strong>在 ★ 位把白子提回来，否则双方会无限循环。黑棋必须先在<strong>别处走一手</strong>（找劫材），等白棋应了之后，才能再提回。</p>
+<figure class="go-figure">
+  {_SVG_KO}
+  <figcaption>劫争：白 1 提黑后，黑不能马上在 ★ 提回，须先在别处走一手。</figcaption>
+</figure>
+<p>初学者只要记住<strong>“不能马上提回”</strong>这一条就够了。</p>
+
+<h2>终局与胜负</h2>
+<p>双方都认为没有棋可下时对局结束（也可以认输）。最后<strong>围住交叉点（目）多的一方获胜</strong>。</p>
+<ul class="num-steps">
+  <li><strong>中国规则（数子法）</strong>：黑棋贴 3¾ 子，数棋盘上双方的子与空，黑 185 子以上胜。</li>
+  <li><strong>日韩规则（数目法）</strong>：数双方围住的空，黑贴 6 目半或 7 目半。</li>
+</ul>
+<p>初学者不必纠结贴目细节，记住“<strong>谁的地盘大谁赢</strong>”就够了。</p>
+
+<div class="tip-box">💡 下一步：先读懂<a href="/learn/qi">气</a>和<a href="/learn/tizi">提子</a>，然后去<a href="/problems">死活题闯关</a>练手吧！</div>""",
+    },
     {
         "slug": "tizi",
         "title": "围棋入门：什么是提子",
@@ -148,7 +253,7 @@ ARTICLES = [
     },
     {
         "slug": "qi",
-        "title": "围棋的“气”怎么看",
+        "title": "气",
         "summary": "一颗棋子的气，就是它上下左右相邻的交叉点。",
         "content": f"""<p class="lead">“气”是围棋里衡量棋子的“生命值”。学会数气，才能看懂提子、死活和整盘棋。</p>
 
