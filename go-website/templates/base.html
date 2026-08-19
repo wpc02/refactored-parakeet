@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}围棋入门{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <nav>
+      <a class="brand" href="{{ url_for('index') }}">围棋入门</a>
+      <div class="nav-links">
+        <a href="{{ url_for('article', slug='tizi') }}">提子</a>
+        <a href="{{ url_for('article', slug='qi') }}">气怎么看</a>
+        <a class="button-link" href="{{ url_for('problems') }}">死活题闯关</a>
+      </div>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <p>围棋入门 · 从提子和气开始 · 1000 道死活题练手</p>
+  </footer>
+</body>
+</html>

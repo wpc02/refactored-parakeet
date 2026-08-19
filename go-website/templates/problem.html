@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}死活题 {{ n }} - 围棋入门{% endblock %}
+{% block content %}
+<section class="article problem-page">
+  <h1>死活题 {{ n }} / 200</h1>
+  <p class="problem-meta">{{ p.name }} · 题目黑棋，你执白棋 · 双击棋盘空点可直接落子并提交</p>
+
+  <div class="board-wrap">
+    <svg id="goban" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+      {% for i in range(9) %}
+        <line x1="40" y1="{{ 40 + i * 40 }}" x2="360" y2="{{ 40 + i * 40 }}" class="grid-line" />
+        <line x1="{{ 40 + i * 40 }}" y1="40" x2="{{ 40 + i * 40 }}" y2="360" class="grid-line" />
+      {% endfor %}
+
+      {% for r in range(9) %}
+        {% for c in range(9) %}
+          {% set ch = p.board[r][c] %}
+          {% if ch == 'B' %}
+            <circle class="stone black" cx="{{ 40 + c * 40 }}" cy="{{ 40 + r * 40 }}" r="17" />
+          {% elif ch == 'W' %}
+            <circle class="stone white" cx="{{ 40 + c * 40 }}" cy="{{ 40 + r * 40 }}" r="17" />
+          {% else %}
+            <g class="hit-point" data-r="{{ r }}" data-c="{{ c }}">
+              <circle class="hit-circle" cx="{{ 40 + c * 40 }}" cy="{{ 40 + r * 40 }}" r="18" />
+            </g>
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+    </svg>
+  </div>
+
+  <div class="problem-actions">
+    <button type="button" id="submit-btn">提交判断</button>
+    <button type="button" id="reset-btn">重来</button>
+    <button type="button" id="show-answer">显示答案</button>
+    <div id="result-box" class="result hidden"></div>
+    <div id="answer-box" class="answer hidden">{{ answer }}</div>
+  </div>
+
+  <nav class="problem-nav">
+    {% if prev_n %}
+      <a href="{{ url_for('problem', n=prev_n) }}">← 上一题</a>
+    {% endif %}
+    <a href="{{ url_for('problems') }}">全部题目</a>
+    {% if next_n %}
+      <a href="{{ url_for('problem', n=next_n) }}">下一题 →</a>
+    {% endif %}
+  </nav>
+</section>
+
+<script>
+  const PROBLEM_N = {{ n }};
+  const USER_STONE_CLASS = 'white';  // 题目棋子为黑棋，用户下白棋
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  let selected = null;       // {r, c, circle}
+  let solved = false;
+  let submitting = false;
+
+  function makeCircle(cx, cy, colorClass) {
+    const circle = document.createElementNS(SVG_NS, 'circle');
+    circle.setAttribute('cx', cx);
+    circle.setAttribute('cy', cy);
+    circle.setAttribute('r', 17);
+    circle.setAttribute('class', 'stone ' + colorClass);
+    return circle;
+  }
+
+  function placeStone(r, c) {
+    clearSelected();
+    const circle = makeCircle(40 + c * 40, 40 + r * 40, USER_STONE_CLASS + ' preview');
+    document.getElementById('goban').appendChild(circle);
+    selected = {r, c, circle};
+  }
+
+  function clearSelected() {
+    if (selected && selected.circle) {
+      selected.circle.remove();
+    }
+    selected = null;
+  }
+
+  function resetAll() {
+    clearSelected();
+    solved = false;
+    submitting = false;
+    document.getElementById('result-box').classList.add('hidden');
+    document.getElementById('answer-box').classList.add('hidden');
+    document.getElementById('submit-btn').disabled = false;
+  }
+
+  async function submitMove() {
+    if (!selected || solved || submitting) return;
+    submitting = true;
+    document.getElementById('submit-btn').disabled = true;
+
+    try {
+      const payload = {r: selected.r, c: selected.c};
+      const resp = await fetch('/api/problem/' + PROBLEM_N + '/check', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      const resultBox = document.getElementById('result-box');
+      resultBox.classList.remove('hidden');
+
+      if (data.correct) {
+        solved = true;
+        selected.circle.classList.remove('preview');
+        selected.circle.classList.add('correct');
+        resultBox.className = 'result success';
+        resultBox.textContent = '✓ 回答正确！' + (data.answer ? ' ' + data.answer : '');
+      } else {
+        resultBox.className = 'result error';
+        resultBox.textContent = '✗ 答错了，请重新落子。';
+        clearSelected();
+        alert('答错，请重新落子。');
+        document.getElementById('submit-btn').disabled = false;
+      }
+    } catch (err) {
+      alert('提交失败，请重试。');
+      document.getElementById('submit-btn').disabled = false;
+    } finally {
+      submitting = false;
+    }
+  }
+
+  document.querySelectorAll('.hit-point').forEach(group => {
+    // 单击：落子
+    group.addEventListener('click', function () {
+      if (solved || submitting) return;
+      const r = parseInt(this.dataset.r, 10);
+      const c = parseInt(this.dataset.c, 10);
+      placeStone(r, c);
+    });
+
+    // 双击：直接落子并提交答案
+    group.addEventListener('dblclick', function (e) {
+      e.preventDefault();
+      if (solved || submitting) return;
+      const r = parseInt(this.dataset.r, 10);
+      const c = parseInt(this.dataset.c, 10);
+      placeStone(r, c);
+      submitMove();
+    });
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', resetAll);
+
+  document.getElementById('submit-btn').addEventListener('click', submitMove);
+
+  document.getElementById('show-answer').addEventListener('click', function () {
+    const box = document.getElementById('answer-box');
+    box.classList.toggle('hidden');
+  });
+</script>
+{% endblock %}

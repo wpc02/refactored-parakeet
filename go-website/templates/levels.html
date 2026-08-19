@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}死活题闯关 - 围棋入门{% endblock %}
+{% block content %}
+<section class="article">
+  <div class="page-head">
+    <h1>死活题闯关</h1>
+    <button class="help-btn" id="help-btn" type="button" aria-label="死活题玩法说明" title="死活题怎么玩？">?</button>
+  </div>
+  <p>共 {{ total_levels }} 关，每关 5 题。答对关卡最后一题自动解锁下一关。不明白怎么玩？点右上角的 <strong>?</strong> 看看说明。</p>
+
+  <div class="level-grid">
+    {% for lv in levels %}
+      {% if lv.locked %}
+        <div class="level-card locked" title="尚未解锁">
+          <span class="lock-icon">🔒</span>
+          <span class="level-title">第 {{ lv.level }} 关</span>
+          <span class="level-range">第 {{ lv.start }} - {{ lv.end }} 题</span>
+        </div>
+      {% else %}
+        <a class="level-card unlocked" href="{{ url_for('problem', n=lv.start) }}">
+          <span class="lock-icon">✅</span>
+          <span class="level-title">第 {{ lv.level }} 关</span>
+          <span class="level-range">第 {{ lv.start }} - {{ lv.end }} 题</span>
+        </a>
+      {% endif %}
+    {% endfor %}
+  </div>
+</section>
+
+<div id="help-modal" class="modal-overlay hidden">
+  <div class="modal-box help-box">
+    <h2>死活题怎么玩</h2>
+    <div class="help-content">
+      {{ help_html | safe }}
+    </div>
+    <button id="help-close-btn" type="button">开始闯关</button>
+  </div>
+</div>
+
+<script>
+  const helpModal = document.getElementById('help-modal');
+  const helpBtn = document.getElementById('help-btn');
+  const helpCloseBtn = document.getElementById('help-close-btn');
+
+  helpBtn.addEventListener('click', function () {
+    helpModal.classList.remove('hidden');
+  });
+  helpCloseBtn.addEventListener('click', function () {
+    helpModal.classList.add('hidden');
+  });
+  helpModal.addEventListener('click', function (e) {
+    if (e.target === helpModal) {
+      helpModal.classList.add('hidden');
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !helpModal.classList.contains('hidden')) {
+      helpModal.classList.add('hidden');
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+{% block title %}第 {{ level }} 关 · 第 {{ n }} 题 - 围棋入门{% endblock %}
+{% block content %}
+<section class="article problem-page">
+  <h1>第 {{ level }} 关 · 第 {{ n }} / {{ total }} 题</h1>
+  <p class="problem-meta">{{ p.name }} · 题目黑棋，你执白棋 · 单击落子，双击落子并提交</p>
+
+  <div class="board-wrap">
+    <svg id="goban" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="wood" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f0c674" />
+          <stop offset="0.5" stop-color="#e0a84f" />
+          <stop offset="1" stop-color="#ca8d3b" />
+        </linearGradient>
+        <radialGradient id="blackStoneGrad" cx="35%" cy="35%" r="70%">
+          <stop offset="0" stop-color="#6b6b6b" />
+          <stop offset="0.45" stop-color="#1f1f1f" />
+          <stop offset="1" stop-color="#000000" />
+        </radialGradient>
+        <radialGradient id="whiteStoneGrad" cx="35%" cy="35%" r="70%">
+          <stop offset="0" stop-color="#ffffff" />
+          <stop offset="0.7" stop-color="#f1f1f1" />
+          <stop offset="1" stop-color="#c9c9c9" />
+        </radialGradient>
+      </defs>
+
+      <rect x="20" y="20" width="360" height="360" rx="8" fill="url(#wood)" />
+
+      {% for i in range(9) %}
+        <line x1="40" y1="{{ 40 + i * 40 }}" x2="360" y2="{{ 40 + i * 40 }}" class="grid-line" />
+        <line x1="{{ 40 + i * 40 }}" y1="40" x2="{{ 40 + i * 40 }}" y2="360" class="grid-line" />
+      {% endfor %}
+
+      {% for r in range(9) %}
+        {% for c in range(9) %}
+          {% set ch = p.board[r][c] %}
+          {% if ch == 'B' %}
+            <g class="placed-stone">
+              <circle class="stone-shadow" cx="{{ 40 + c * 40 }}" cy="{{ 42 + r * 40 }}" r="17" />
+              <circle class="stone black-stone" cx="{{ 40 + c * 40 }}" cy="{{ 40 + r * 40 }}" r="17" />
+              <circle class="stone-shine" cx="{{ 36 + c * 40 }}" cy="{{ 36 + r * 40 }}" r="5" />
+            </g>
+          {% elif ch == 'W' %}
+            <g class="placed-stone">
+              <circle class="stone-shadow" cx="{{ 40 + c * 40 }}" cy="{{ 42 + r * 40 }}" r="17" />
+              <circle class="stone white-stone" cx="{{ 40 + c * 40 }}" cy="{{ 40 + r * 40 }}" r="17" />
+              <circle class="stone-shine" cx="{{ 36 + c * 40 }}" cy="{{ 36 + r * 40 }}" r="5" />
+            </g>
+          {% else %}
+            <g class="hit-point" data-r="{{ r }}" data-c="{{ c }}">
+              <circle class="hit-circle" cx="{{ 40 + c * 40 }}" cy="{{ 40 + r * 40 }}" r="18" />
+            </g>
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+    </svg>
+  </div>
+
+  <div class="problem-actions">
+    <button type="button" id="submit-btn">提交判断</button>
+    <button type="button" id="hint-btn">💡 提示</button>
+    <button type="button" id="reset-btn">重来</button>
+    <a id="page-next-btn" class="page-next hidden" href="#">下一题</a>
+  </div>
+
+  <nav class="problem-nav">
+    {% if prev_n %}
+      <a href="{{ url_for('problem', n=prev_n) }}">← 上一题</a>
+    {% endif %}
+    <a href="{{ url_for('problems') }}">关卡列表</a>
+  </nav>
+</section>
+
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div id="modal-box" class="modal-box">
+    <h2 id="modal-title"></h2>
+    <p id="modal-message"></p>
+    <a id="modal-next-btn" class="modal-next hidden" href="#">下一题</a>
+    <button id="modal-close-btn" type="button">关闭</button>
+  </div>
+</div>
+
+<script>
+  const PROBLEM_N = {{ n }};
+  const VITAL = {{ p.vital | tojson }};
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  let selected = null;       // {r, c, group}
+  let solved = false;
+  let submitting = false;
+
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalBox = document.getElementById('modal-box');
+  const modalTitle = document.getElementById('modal-title');
+  const modalMessage = document.getElementById('modal-message');
+  const modalNextBtn = document.getElementById('modal-next-btn');
+  const modalCloseBtn = document.getElementById('modal-close-btn');
+  const pageNextBtn = document.getElementById('page-next-btn');
+
+  function makeUserStone(cx, cy) {
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('pointer-events', 'none');
+    const shadow = document.createElementNS(SVG_NS, 'circle');
+    shadow.setAttribute('class', 'stone-shadow');
+    shadow.setAttribute('cx', cx);
+    shadow.setAttribute('cy', cy + 2);
+    shadow.setAttribute('r', 17);
+    const stone = document.createElementNS(SVG_NS, 'circle');
+    stone.setAttribute('class', 'stone white-stone preview');
+    stone.setAttribute('cx', cx);
+    stone.setAttribute('cy', cy);
+    stone.setAttribute('r', 17);
+    const shine = document.createElementNS(SVG_NS, 'circle');
+    shine.setAttribute('class', 'stone-shine');
+    shine.setAttribute('cx', cx - 4);
+    shine.setAttribute('cy', cy - 4);
+    shine.setAttribute('r', 5);
+    g.appendChild(shadow);
+    g.appendChild(stone);
+    g.appendChild(shine);
+    return g;
+  }
+
+  function placeStone(r, c) {
+    clearSelected();
+    removeHintAt(r, c);
+    const group = makeUserStone(40 + c * 40, 40 + r * 40);
+    document.getElementById('goban').appendChild(group);
+    selected = {r, c, group};
+  }
+
+  function clearSelected() {
+    if (selected && selected.group) {
+      selected.group.remove();
+    }
+    selected = null;
+  }
+
+  function resetAll() {
+    clearSelected();
+    clearHints();
+    solved = false;
+    submitting = false;
+    document.getElementById('submit-btn').disabled = false;
+    hideModal();
+  }
+
+  // ---- 提示功能 ----
+  const hintBtn = document.getElementById('hint-btn');
+  let hints = [];
+
+  function renderHints() {
+    clearHints();
+    for (const pt of VITAL) {
+      const r = pt[0], c = pt[1];
+      const cx = 40 + c * 40, cy = 40 + r * 40;
+      const g = document.createElementNS(SVG_NS, 'g');
+      g.setAttribute('class', 'hint-stone');
+      g.setAttribute('data-hint-r', r);
+      g.setAttribute('data-hint-c', c);
+      const body = document.createElementNS(SVG_NS, 'circle');
+      body.setAttribute('class', 'stone-hint-body');
+      body.setAttribute('cx', cx);
+      body.setAttribute('cy', cy);
+      body.setAttribute('r', 17);
+      const core = document.createElementNS(SVG_NS, 'circle');
+      core.setAttribute('class', 'stone-hint-core');
+      core.setAttribute('cx', cx);
+      core.setAttribute('cy', cy);
+      core.setAttribute('r', 6);
+      g.appendChild(body);
+      g.appendChild(core);
+      goban.appendChild(g);
+      hints.push({r: r, c: c, group: g});
+    }
+  }
+
+  function clearHints() {
+    for (const h of hints) h.group.remove();
+    hints = [];
+  }
+
+  function removeHintAt(r, c) {
+    const idx = hints.findIndex(h => h.r === r && h.c === c);
+    if (idx >= 0) {
+      hints[idx].group.remove();
+      hints.splice(idx, 1);
+    }
+  }
+
+  hintBtn.addEventListener('click', function () {
+    if (solved || submitting) return;
+    if (hints.length) {
+      clearHints();
+    } else {
+      renderHints();
+    }
+  });
+
+  function showModal(title, message, nextUrl, nextText) {
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+    if (nextUrl) {
+      modalNextBtn.href = nextUrl;
+      modalNextBtn.textContent = nextText || '下一题';
+      modalNextBtn.classList.remove('hidden');
+      pageNextBtn.href = nextUrl;
+      pageNextBtn.textContent = nextText || '下一题';
+      pageNextBtn.classList.remove('hidden');
+    } else {
+      modalNextBtn.classList.add('hidden');
+    }
+    modalOverlay.classList.remove('hidden');
+  }
+
+  function hideModal() {
+    modalOverlay.classList.add('hidden');
+  }
+
+  async function submitMove() {
+    if (!selected || solved || submitting) return;
+    submitting = true;
+    document.getElementById('submit-btn').disabled = true;
+
+    try {
+      const payload = {r: selected.r, c: selected.c};
+      const resp = await fetch('/api/problem/' + PROBLEM_N + '/check', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+
+      if (data.correct) {
+        solved = true;
+        clearHints();
+        const stone = selected.group.querySelector('.white-stone');
+        stone.classList.remove('preview');
+          pageNextBtn.classList.remove('hidden');
+        stone.classList.add('correct');
+
+        let nextUrl = '{{ url_for("problems") }}';
+        let nextText = '返回关卡';
+        if (data.next_problem) {
+          nextUrl = '/problem/' + data.next_problem;
+          nextText = '下一题';
+        } else if (data.next_level) {
+          nextUrl = '{{ url_for("problems") }}';
+          nextText = '进入第 ' + data.next_level + ' 关';
+        }
+
+        showModal(
+          '恭喜你，答对了',
+          data.answer || '',
+          nextUrl,
+          nextText
+        );
+      } else {
+        clearSelected();
+        showModal('答错了', '请重新落子，再试一次。');
+        document.getElementById('submit-btn').disabled = false;
+      }
+    } catch (err) {
+      showModal('提交失败', '请重试。');
+      document.getElementById('submit-btn').disabled = false;
+    } finally {
+      submitting = false;
+    }
+  }
+
+  const goban = document.getElementById('goban');
+
+  function hitPointFromEvent(e) {
+    const el = e.target.closest ? e.target.closest('.hit-point') : null;
+    if (!el || !goban.contains(el)) return null;
+    return {
+      r: parseInt(el.dataset.r, 10),
+      c: parseInt(el.dataset.c, 10)
+    };
+  }
+
+  goban.addEventListener('click', function (e) {
+    const point = hitPointFromEvent(e);
+    if (!point || solved || submitting || !modalOverlay.classList.contains('hidden')) return;
+    placeStone(point.r, point.c);
+  });
+
+  goban.addEventListener('dblclick', function (e) {
+    e.preventDefault();
+    const point = hitPointFromEvent(e);
+    if (!point || solved || submitting || !modalOverlay.classList.contains('hidden')) return;
+    placeStone(point.r, point.c);
+    submitMove();
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', resetAll);
+  document.getElementById('submit-btn').addEventListener('click', submitMove);
+  modalCloseBtn.addEventListener('click', hideModal);
+  modalOverlay.addEventListener('click', function (e) {
+    if (e.target === modalOverlay && !solved) {
+      hideModal();
+    }
+  });
+</script>
+{% endblock %}

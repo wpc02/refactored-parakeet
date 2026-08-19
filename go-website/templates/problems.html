@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}200道死活题{% endblock %}
+{% block content %}
+<section class="article">
+  <h1>经典死活题 200 道</h1>
+  <p>点击题号进入练习。棋盘符号：● 黑棋，○ 白棋，· 空点。</p>
+  <div class="problem-grid">
+    {% for p in problems %}
+      <a class="problem-cell" href="{{ url_for('problem', n=loop.index) }}">
+        <span class="problem-id">{{ loop.index }}</span>
+        <span class="problem-name">{{ p.name }}</span>
+        <span class="problem-player">白先</span>
+      </a>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

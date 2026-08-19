@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 环境/虚拟环境
+.venv/
+venv/
+
+# 大体积二进制（需要时从 https://github.com/cloudflare/cloudflared/releases 下载）
+cloudflared.exe
+
+# 运行时产物
+games/
+*.log
