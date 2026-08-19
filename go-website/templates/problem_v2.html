@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block title %}第 {{ level }} 关 · 第 {{ n }} 题 - 围棋入门{% endblock %}
 {% block content %}
 <section class="article problem-page">
@@ -385,6 +385,19 @@
   modalOverlay.addEventListener('click', function (e) {
     if (e.target === modalOverlay && !solved) {
       hideModal();
+    }
+  });
+
+  // ---- 空格键快捷键：答对弹窗中触发"下一题" ----
+  window.addEventListener('keydown', function (e) {
+    if (e.code !== 'Space') return;
+    // 焦点在按钮/链接/输入框上时不拦截（避免双重触发）
+    const t = e.target;
+    if (t && (t.tagName === 'BUTTON' || t.tagName === 'A' || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+    // 仅当弹窗可见且"下一题"按钮显示时生效
+    if (!modalOverlay.classList.contains('hidden') && !modalNextBtn.classList.contains('hidden')) {
+      e.preventDefault();
+      modalNextBtn.click();
     }
   });
 </script>
