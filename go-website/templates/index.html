@@ -9,11 +9,22 @@
 
 <section class="cards">
   {% for a in articles %}
-  <article class="card">
+  <article class="card" data-href="{{ url_for('article', slug=a.slug) }}">
     <h2>{{ a.title }}</h2>
     <p>{{ a.summary }}</p>
     <a href="{{ url_for('article', slug=a.slug) }}">阅读全文 →</a>
   </article>
   {% endfor %}
 </section>
+
+<script>
+  // 双击卡片 = 阅读全文
+  document.querySelectorAll('.card').forEach(function (card) {
+    card.addEventListener('dblclick', function () {
+      window.location.href = card.dataset.href;
+    });
+    // 提示双击可用
+    card.style.cursor = 'pointer';
+  });
+</script>
 {% endblock %}
