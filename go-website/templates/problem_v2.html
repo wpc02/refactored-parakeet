@@ -1,9 +1,9 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% block title %}第 {{ level }} 关 · 第 {{ n }} 题 - 围棋入门{% endblock %}
 {% block content %}
 <section class="article problem-page">
-  <h1>第 {{ level }} 关 · 第 {{ n }} / {{ total }} 题</h1>
-  <p class="problem-meta">{{ p.name }} · 题目黑棋，你执白棋 · 单击落子，双击落子并提交</p>
+  <h1 id="prob-title">第 {{ level }} 关 · 第 {{ n }} / {{ total }} 题</h1>
+  <p class="problem-meta" id="prob-meta">{{ p.name }} · 题目黑棋，你执白棋 · 单击落子并提交</p>
 
   <div class="board-wrap">
     <svg id="goban" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
@@ -13,47 +13,55 @@
           <stop offset="0.5" stop-color="#e0a84f" />
           <stop offset="1" stop-color="#ca8d3b" />
         </linearGradient>
-        <radialGradient id="blackStoneGrad" cx="35%" cy="35%" r="70%">
-          <stop offset="0" stop-color="#6b6b6b" />
-          <stop offset="0.45" stop-color="#1f1f1f" />
-          <stop offset="1" stop-color="#000000" />
+        <radialGradient id="blackStoneGrad" cx="32%" cy="28%" r="80%">
+          <stop offset="0" stop-color="#9a9a9a" />
+          <stop offset="0.15" stop-color="#555555" />
+          <stop offset="0.5" stop-color="#1e1e1e" />
+          <stop offset="0.88" stop-color="#050505" />
+          <stop offset="1" stop-color="#3a3a3a" />
         </radialGradient>
-        <radialGradient id="whiteStoneGrad" cx="35%" cy="35%" r="70%">
+        <radialGradient id="whiteStoneGrad" cx="32%" cy="28%" r="82%">
           <stop offset="0" stop-color="#ffffff" />
-          <stop offset="0.7" stop-color="#f1f1f1" />
-          <stop offset="1" stop-color="#c9c9c9" />
+          <stop offset="0.55" stop-color="#f8f6f2" />
+          <stop offset="0.85" stop-color="#dcd6ca" />
+          <stop offset="1" stop-color="#b3ab9c" />
         </radialGradient>
+        <filter id="stoneShadow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="2.6" />
+          <feOffset dx="0" dy="3.2" />
+          <feComponentTransfer>
+            <feFuncA type="linear" slope="0.5" />
+          </feComponentTransfer>
+          <feMerge>
+            <feMergeNode />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
       </defs>
 
       <rect x="20" y="20" width="360" height="360" rx="8" fill="url(#wood)" />
+      <image href="{{ url_for('static', filename='board.png') }}" x="20" y="20" width="360" height="360" preserveAspectRatio="xMidYMid slice" />
 
       {% for i in range(9) %}
         <line x1="40" y1="{{ 40 + i * 40 }}" x2="360" y2="{{ 40 + i * 40 }}" class="grid-line" />
         <line x1="{{ 40 + i * 40 }}" y1="40" x2="{{ 40 + i * 40 }}" y2="360" class="grid-line" />
       {% endfor %}
 
-      {% for r in range(9) %}
-        {% for c in range(9) %}
-          {% set ch = p.board[r][c] %}
-          {% if ch == 'B' %}
-            <g class="placed-stone">
-              <circle class="stone-shadow" cx="{{ 40 + c * 40 }}" cy="{{ 42 + r * 40 }}" r="17" />
-              <circle class="stone black-stone" cx="{{ 40 + c * 40 }}" cy="{{ 40 + r * 40 }}" r="17" />
-              <circle class="stone-shine" cx="{{ 36 + c * 40 }}" cy="{{ 36 + r * 40 }}" r="5" />
-            </g>
-          {% elif ch == 'W' %}
-            <g class="placed-stone">
-              <circle class="stone-shadow" cx="{{ 40 + c * 40 }}" cy="{{ 42 + r * 40 }}" r="17" />
-              <circle class="stone white-stone" cx="{{ 40 + c * 40 }}" cy="{{ 40 + r * 40 }}" r="17" />
-              <circle class="stone-shine" cx="{{ 36 + c * 40 }}" cy="{{ 36 + r * 40 }}" r="5" />
-            </g>
-          {% else %}
-            <g class="hit-point" data-r="{{ r }}" data-c="{{ c }}">
-              <circle class="hit-circle" cx="{{ 40 + c * 40 }}" cy="{{ 40 + r * 40 }}" r="18" />
-            </g>
-          {% endif %}
-        {% endfor %}
+      <!-- 坐标标注：列 A-I（上）、行 1-9（左），尽量靠外 -->
+      {% for c in range(9) %}
+        {% set col = 'ABCDEFGHI'[c] %}
+        <text x="{{ 40 + c * 40 }}" y="18" text-anchor="middle" font-size="11" fill="#6b4a26" font-weight="bold">{{ col }}</text>
       {% endfor %}
+      {% for r in range(9) %}
+        <text x="11" y="{{ 40 + r * 40 }}" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#6b4a26" font-weight="bold">{{ r + 1 }}</text>
+      {% endfor %}
+
+      {% for sr, sc in [(2,2),(2,6),(6,2),(6,6),(4,4)] %}
+        <circle cx="{{ 40 + sc * 40 }}" cy="{{ 40 + sr * 40 }}" r="3.5" fill="#4a3a22" />
+      {% endfor %}
+
+      <!-- 棋子层（JS 动态渲染，支持无刷新切换下一题） -->
+      <g id="stones"></g>
     </svg>
   </div>
 
@@ -82,13 +90,16 @@
 </div>
 
 <script>
-  const PROBLEM_N = {{ n }};
-  const VITAL = {{ p.vital | tojson }};
+  let PROBLEM_N = {{ n }};
+  let VITAL = {{ p.vital | tojson }};
+  const INITIAL_BOARD = {{ p.board | tojson }};
+  const TOTAL = {{ total }};
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
   let selected = null;       // {r, c, group}
   let solved = false;
   let submitting = false;
+  let loadingProblem = false;
 
   const modalOverlay = document.getElementById('modal-overlay');
   const modalBox = document.getElementById('modal-box');
@@ -98,27 +109,109 @@
   const modalCloseBtn = document.getElementById('modal-close-btn');
   const pageNextBtn = document.getElementById('page-next-btn');
 
+  // ---- 棋盘渲染（JS 动态，支持无刷新切换） ----
+  function renderStones(board) {
+    const stones = document.getElementById('stones');
+    stones.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        const ch = board[r][c];
+        const cx = 40 + c * 40, cy = 40 + r * 40;
+        if (ch === 'B' || ch === 'W') {
+          const g = document.createElementNS(SVG_NS, 'g');
+          g.setAttribute('class', 'placed-stone');
+          const stone = document.createElementNS(SVG_NS, 'circle');
+          stone.setAttribute('class', 'stone ' + (ch === 'B' ? 'black-stone' : 'white-stone'));
+          stone.setAttribute('cx', cx);
+          stone.setAttribute('cy', cy);
+          stone.setAttribute('r', 17);
+          stone.setAttribute('filter', 'url(#stoneShadow)');
+          g.appendChild(stone);
+          frag.appendChild(g);
+        } else {
+          const g = document.createElementNS(SVG_NS, 'g');
+          g.setAttribute('class', 'hit-point');
+          g.setAttribute('data-r', r);
+          g.setAttribute('data-c', c);
+          const hc = document.createElementNS(SVG_NS, 'circle');
+          hc.setAttribute('class', 'hit-circle');
+          hc.setAttribute('cx', cx);
+          hc.setAttribute('cy', cy);
+          hc.setAttribute('r', 18);
+          g.appendChild(hc);
+          frag.appendChild(g);
+        }
+      }
+    }
+    stones.appendChild(frag);
+  }
+
+  // ---- 无刷新切换下一题 ----
+  async function goProblem(n) {
+    if (loadingProblem) return;
+    loadingProblem = true;
+    try {
+      const resp = await fetch('/api/problem/' + n);
+      const data = await resp.json();
+      PROBLEM_N = n;
+      VITAL = data.vital;
+      solved = false;
+      submitting = false;
+      clearSelected();
+      clearHints();
+      hideModal();
+      renderStones(data.board);
+      const level = Math.floor((n - 1) / 5) + 1;
+      document.getElementById('prob-title').textContent = '第 ' + level + ' 关 · 第 ' + n + ' / ' + TOTAL + ' 题';
+      document.getElementById('prob-meta').textContent = data.name + ' · 题目黑棋，你执白棋 · 单击落子并提交';
+      document.title = '第 ' + level + ' 关 · 第 ' + n + ' 题 - 围棋入门';
+      history.pushState(null, '', '/problem/' + n);
+    } catch (err) {
+      window.location.href = '/problem/' + n;
+    } finally {
+      loadingProblem = false;
+    }
+  }
+
+  function bindNextLink(el) {
+    if (!el) return;
+    el.addEventListener('click', function (e) {
+      const href = el.getAttribute('href') || '';
+      const m = href.match(/^\/problem\/(\d+)$/);
+      if (m) {
+        e.preventDefault();
+        goProblem(parseInt(m[1], 10));
+      }
+    });
+  }
+  bindNextLink(modalNextBtn);
+  bindNextLink(pageNextBtn);
+
+  // 初始渲染
+  renderStones(INITIAL_BOARD);
+
+  // ---- 落子音效 ----
+  const placeAudio = new Audio('/static/sound/place.wav?v=15');
+  placeAudio.volume = 1.0;
+  placeAudio.preload = 'auto';
+  function playPlaceSound() {
+    try {
+      placeAudio.currentTime = 0;
+      placeAudio.play().catch(function () {});
+    } catch (err) { /* 忽略自动播放限制 */ }
+  }
+
   function makeUserStone(cx, cy) {
     const g = document.createElementNS(SVG_NS, 'g');
     g.setAttribute('pointer-events', 'none');
-    const shadow = document.createElementNS(SVG_NS, 'circle');
-    shadow.setAttribute('class', 'stone-shadow');
-    shadow.setAttribute('cx', cx);
-    shadow.setAttribute('cy', cy + 2);
-    shadow.setAttribute('r', 17);
     const stone = document.createElementNS(SVG_NS, 'circle');
     stone.setAttribute('class', 'stone white-stone preview');
     stone.setAttribute('cx', cx);
     stone.setAttribute('cy', cy);
     stone.setAttribute('r', 17);
-    const shine = document.createElementNS(SVG_NS, 'circle');
-    shine.setAttribute('class', 'stone-shine');
-    shine.setAttribute('cx', cx - 4);
-    shine.setAttribute('cy', cy - 4);
-    shine.setAttribute('r', 5);
-    g.appendChild(shadow);
+    stone.setAttribute('filter', 'url(#stoneShadow)');
     g.appendChild(stone);
-    g.appendChild(shine);
     return g;
   }
 
@@ -128,6 +221,7 @@
     const group = makeUserStone(40 + c * 40, 40 + r * 40);
     document.getElementById('goban').appendChild(group);
     selected = {r, c, group};
+    playPlaceSound();
   }
 
   function clearSelected() {
@@ -200,7 +294,13 @@
 
   function showModal(title, message, nextUrl, nextText) {
     modalTitle.textContent = title;
-    modalMessage.textContent = message;
+    if (message) {
+      modalMessage.textContent = message;
+      modalMessage.classList.remove('hidden');
+    } else {
+      modalMessage.textContent = '';
+      modalMessage.classList.add('hidden');
+    }
     if (nextUrl) {
       modalNextBtn.href = nextUrl;
       modalNextBtn.textContent = nextText || '下一题';
@@ -223,50 +323,41 @@
     submitting = true;
     document.getElementById('submit-btn').disabled = true;
 
+    const r = selected.r, c = selected.c;
+    // 本地即时判断（VITAL 已在页面内），弹窗零延迟，不等网络
+    const correct = VITAL.some(function (pt) { return pt[0] === r && pt[1] === c; });
+
+    if (correct) {
+      solved = true;
+      clearHints();
+      const stone = selected.group.querySelector('.white-stone');
+      stone.classList.remove('preview');
+      stone.classList.add('correct');
+
+      let nextUrl = '{{ url_for("problems") }}';
+      let nextText = '返回关卡';
+      if (PROBLEM_N < {{ total }}) {
+        nextUrl = '/problem/' + (PROBLEM_N + 1);
+        nextText = '下一题';
+      }
+
+      showModal('恭喜你，答对了', '', nextUrl, nextText);
+    } else {
+      clearSelected();
+      showModal('答错了', '请重新落子，再试一次。');
+      document.getElementById('submit-btn').disabled = false;
+    }
+
+    submitting = false;
+
+    // 后台同步通关进度到服务器（不阻塞弹窗显示）
     try {
-      const payload = {r: selected.r, c: selected.c};
-      const resp = await fetch('/api/problem/' + PROBLEM_N + '/check', {
+      await fetch('/api/problem/' + PROBLEM_N + '/check', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
+        body: JSON.stringify({r: r, c: c})
       });
-      const data = await resp.json();
-
-      if (data.correct) {
-        solved = true;
-        clearHints();
-        const stone = selected.group.querySelector('.white-stone');
-        stone.classList.remove('preview');
-          pageNextBtn.classList.remove('hidden');
-        stone.classList.add('correct');
-
-        let nextUrl = '{{ url_for("problems") }}';
-        let nextText = '返回关卡';
-        if (data.next_problem) {
-          nextUrl = '/problem/' + data.next_problem;
-          nextText = '下一题';
-        } else if (data.next_level) {
-          nextUrl = '{{ url_for("problems") }}';
-          nextText = '进入第 ' + data.next_level + ' 关';
-        }
-
-        showModal(
-          '恭喜你，答对了',
-          data.answer || '',
-          nextUrl,
-          nextText
-        );
-      } else {
-        clearSelected();
-        showModal('答错了', '请重新落子，再试一次。');
-        document.getElementById('submit-btn').disabled = false;
-      }
-    } catch (err) {
-      showModal('提交失败', '请重试。');
-      document.getElementById('submit-btn').disabled = false;
-    } finally {
-      submitting = false;
-    }
+    } catch (err) { /* 进度同步失败不影响本次体验 */ }
   }
 
   const goban = document.getElementById('goban');
@@ -280,14 +371,8 @@
     };
   }
 
+  // 单击落子并立即提交
   goban.addEventListener('click', function (e) {
-    const point = hitPointFromEvent(e);
-    if (!point || solved || submitting || !modalOverlay.classList.contains('hidden')) return;
-    placeStone(point.r, point.c);
-  });
-
-  goban.addEventListener('dblclick', function (e) {
-    e.preventDefault();
     const point = hitPointFromEvent(e);
     if (!point || solved || submitting || !modalOverlay.classList.contains('hidden')) return;
     placeStone(point.r, point.c);
